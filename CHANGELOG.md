@@ -2,7 +2,13 @@
 
 FEATURES:
 
+* **New Resource:** `aws_media_convert_queue` [GH-10041]
 * **New Resource:** `aws_workspaces_ip_group` [GH-10904]
+
+ENHANCEMENTS:
+
+* resource/aws_apigateway_usage_plan: Add `tags` argument and `arn` attribute [GH-10566]
+* resource/aws_lb_listener_rule: Support ALB advanced routing rules [GH-8268]
 
 BUG FIXES:
 
@@ -136,7 +142,6 @@ ENHANCEMENTS:
 
 * data-source/aws_iam_group: Add `users` attribute ([#7132](https://github.com/terraform-providers/terraform-provider-aws/issues/7132))
 * resource/aws_apigateway_stage: Add `arn` attribute ([#10570](https://github.com/terraform-providers/terraform-provider-aws/issues/10570))
-* resource/aws_apigateway_usage_plan: Add `tags` argument and `arn` attribute ([#10566](https://github.com/terraform-providers/terraform-provider-aws/issues/10566))
 * resource/aws_s3_bucket: Retry reading tags on `NoSuchBucket` errors due to eventual inconsistency ([#10863](https://github.com/terraform-providers/terraform-provider-aws/issues/10863))
 * resource/aws_waf_rule: Add `arn` attribute ([#10798](https://github.com/terraform-providers/terraform-provider-aws/issues/10798))
 * resource/aws_waf_rule_group: Add `arn` attribute ([#10799](https://github.com/terraform-providers/terraform-provider-aws/issues/10799))

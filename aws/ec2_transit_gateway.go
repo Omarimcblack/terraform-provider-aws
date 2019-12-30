@@ -433,6 +433,26 @@ func ec2TransitGatewayPeeringAttachmentRefreshFunc(conn *ec2.EC2, transitGateway
 
 func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAttachmentID string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
+		transitGatewayPeeringAttachment, err := ec2DescribeTransitGatewayPeeringAttachment(conn, transitGatewayAttachmentID)
+
+		if isAWSErr(err, "InvalidTransitGatewayAttachmentID.NotFound", "") {
+			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
+		}
+
+		if err != nil {
+			return nil, "", fmt.Errorf("error reading EC2 Transit Gateway Peering Attachment (%s): %s", transitGatewayAttachmentID, err)
+		}
+
+		if transitGatewayPeeringAttachment == nil {
+			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
+		}
+
+		return transitGatewayPeeringAttachment, aws.StringValue(transitGatewayPeeringAttachment.State), nil
+	}
+}
+
+func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAttachmentID string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
 		transitGatewayVpcAttachment, err := ec2DescribeTransitGatewayVpcAttachment(conn, transitGatewayAttachmentID)
 
 		if isAWSErr(err, "InvalidTransitGatewayAttachmentID.NotFound", "") {
@@ -448,45 +468,6 @@ func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAtta
 		}
 
 		return transitGatewayVpcAttachment, aws.StringValue(transitGatewayVpcAttachment.State), nil
-	}
-}
-
-func expandEc2TransitGatewayTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway"),
-			Tags:         tagsFromMap(m),
-		},
-	}
-}
-
-func expandEc2TransitGatewayAttachmentTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway-attachment"),
-			Tags:         tagsFromMap(m),
-		},
-	}
-}
-
-func expandEc2TransitGatewayRouteTableTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway-route-table"),
-			Tags:         tagsFromMap(m),
-		},
 	}
 }
 
@@ -598,6 +579,17 @@ func waitForEc2TransitGatewayRouteTableAssociationDeletion(conn *ec2.EC2, transi
 	return err
 }
 
+func waitForEc2TransitGatewayPeeringAttachmentCreation(conn *ec2.EC2, transitGatewayAttachmentID string) error {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{
+			ec2.TransitGatewayAttachmentStatePending,
+			"initiatingRequest",
+		},
+		Target: []string{
+			ec2.TransitGatewayAttachmentStatePendingAcceptance,
+			ec2.TransitGatewayAttachmentStateAvailable,
+		},
+
 func waitForEc2TransitGatewayPeeringAttachmentAcceptance(conn *ec2.EC2, transitGatewayAttachmentID string) error {
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{
@@ -633,6 +625,20 @@ func waitForEc2TransitGatewayPeeringAttachmentDeletion(conn *ec2.EC2, transitGat
 	if isResourceNotFoundError(err) {
 		return nil
 	}
+
+	return err
+}
+
+func waitForEc2TransitGatewayPeeringAttachmentUpdate(conn *ec2.EC2, transitGatewayAttachmentID string) error {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{ec2.TransitGatewayAttachmentStateModifying},
+		Target:  []string{ec2.TransitGatewayAttachmentStateAvailable},
+		Refresh: ec2TransitGatewayVpcAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
+		Timeout: 10 * time.Minute,
+	}
+
+	log.Printf("[DEBUG] Waiting for EC2 Transit Gateway Peering Attachment (%s) availability", transitGatewayAttachmentID)
+	_, err := stateConf.WaitForState()
 
 	return err
 }
