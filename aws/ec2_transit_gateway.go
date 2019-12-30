@@ -433,6 +433,26 @@ func ec2TransitGatewayPeeringAttachmentRefreshFunc(conn *ec2.EC2, transitGateway
 
 func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAttachmentID string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
+		transitGatewayPeeringAttachment, err := ec2DescribeTransitGatewayPeeringAttachment(conn, transitGatewayAttachmentID)
+
+		if isAWSErr(err, "InvalidTransitGatewayAttachmentID.NotFound", "") {
+			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
+		}
+
+		if err != nil {
+			return nil, "", fmt.Errorf("error reading EC2 Transit Gateway Peering Attachment (%s): %s", transitGatewayAttachmentID, err)
+		}
+
+		if transitGatewayPeeringAttachment == nil {
+			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
+		}
+
+		return transitGatewayPeeringAttachment, aws.StringValue(transitGatewayPeeringAttachment.State), nil
+	}
+}
+
+func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAttachmentID string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
 		transitGatewayVpcAttachment, err := ec2DescribeTransitGatewayVpcAttachment(conn, transitGatewayAttachmentID)
 
 		if isAWSErr(err, "InvalidTransitGatewayAttachmentID.NotFound", "") {
@@ -569,6 +589,14 @@ func waitForEc2TransitGatewayPeeringAttachmentCreation(conn *ec2.EC2, transitGat
 			ec2.TransitGatewayAttachmentStatePendingAcceptance,
 			ec2.TransitGatewayAttachmentStateAvailable,
 		},
+
+func waitForEc2TransitGatewayPeeringAttachmentAcceptance(conn *ec2.EC2, transitGatewayAttachmentID string) error {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{
+			ec2.TransitGatewayAttachmentStatePending,
+			ec2.TransitGatewayAttachmentStatePendingAcceptance,
+		},
+		Target:  []string{ec2.TransitGatewayAttachmentStateAvailable},
 		Refresh: ec2TransitGatewayPeeringAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
 		Timeout: 10 * time.Minute,
 	}
