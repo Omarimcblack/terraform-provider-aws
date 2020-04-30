@@ -615,16 +615,37 @@ func waitForEc2TransitGatewayPeeringAttachmentAcceptance(conn *ec2.EC2, transitG
 	return err
 }
 
+func waitForEc2TransitGatewayPeeringAttachmentCreation(conn *ec2.EC2, transitGatewayAttachmentID string) error {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{
+			ec2.TransitGatewayAttachmentStatePending,
+			"initiatingRequest", // No ENUM currently exists in the SDK for the state given by AWS
+		},
+		Target: []string{
+			ec2.TransitGatewayAttachmentStatePendingAcceptance,
+			ec2.TransitGatewayAttachmentStateAvailable,
+		},
+		Refresh: ec2TransitGatewayPeeringAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
+		Timeout: 10 * time.Minute,
+	}
+
+	log.Printf("[DEBUG] Waiting for EC2 Transit Gateway Peering Attachment (%s) availability", transitGatewayAttachmentID)
+	_, err := stateConf.WaitForState()
+
+	return err
+}
+
 func waitForEc2TransitGatewayPeeringAttachmentDeletion(conn *ec2.EC2, transitGatewayAttachmentID string) error {
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{
 			ec2.TransitGatewayAttachmentStateAvailable,
 			ec2.TransitGatewayAttachmentStateDeleting,
+			ec2.TransitGatewayAttachmentStatePendingAcceptance,
+			ec2.TransitGatewayAttachmentStateRejected,
 		},
-		Target:         []string{ec2.TransitGatewayAttachmentStateDeleted},
-		Refresh:        ec2TransitGatewayVpcAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
-		Timeout:        10 * time.Minute,
-		NotFoundChecks: 1,
+		Target:  []string{ec2.TransitGatewayAttachmentStateDeleted},
+		Refresh: ec2TransitGatewayPeeringAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
+		Timeout: 10 * time.Minute,
 	}
 
 	log.Printf("[DEBUG] Waiting for EC2 Transit Gateway Peering Attachment (%s) deletion", transitGatewayAttachmentID)
