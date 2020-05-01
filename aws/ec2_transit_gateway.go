@@ -433,60 +433,25 @@ func ec2TransitGatewayPeeringAttachmentRefreshFunc(conn *ec2.EC2, transitGateway
 
 func ec2TransitGatewayVpcAttachmentRefreshFunc(conn *ec2.EC2, transitGatewayAttachmentID string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		transitGatewayVpcAttachment, err := ec2DescribeTransitGatewayVpcAttachment(conn, transitGatewayAttachmentID)
+		transitGatewayPeeringAttachment, err := ec2DescribeTransitGatewayPeeringAttachment(conn, transitGatewayAttachmentID)
 
 		if isAWSErr(err, "InvalidTransitGatewayAttachmentID.NotFound", "") {
 			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
 		}
 
 		if err != nil {
-			return nil, "", fmt.Errorf("error reading EC2 Transit Gateway VPC Attachment (%s): %s", transitGatewayAttachmentID, err)
+			return nil, "", fmt.Errorf("error reading EC2 Transit Gateway Peering Attachment (%s): %s", transitGatewayAttachmentID, err)
 		}
 
-		if transitGatewayVpcAttachment == nil {
+		if transitGatewayPeeringAttachment == nil {
 			return nil, ec2.TransitGatewayAttachmentStateDeleted, nil
 		}
 
-		return transitGatewayVpcAttachment, aws.StringValue(transitGatewayVpcAttachment.State), nil
-	}
-}
+		if aws.StringValue(transitGatewayPeeringAttachment.State) == ec2.TransitGatewayAttachmentStateFailed && transitGatewayPeeringAttachment.Status != nil {
+			return transitGatewayPeeringAttachment, aws.StringValue(transitGatewayPeeringAttachment.State), fmt.Errorf("%s: %s", aws.StringValue(transitGatewayPeeringAttachment.Status.Code), aws.StringValue(transitGatewayPeeringAttachment.Status.Message))
+		}
 
-func expandEc2TransitGatewayTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway"),
-			Tags:         tagsFromMap(m),
-		},
-	}
-}
-
-func expandEc2TransitGatewayAttachmentTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway-attachment"),
-			Tags:         tagsFromMap(m),
-		},
-	}
-}
-
-func expandEc2TransitGatewayRouteTableTagSpecifications(m map[string]interface{}) []*ec2.TagSpecification {
-	if len(m) == 0 {
-		return nil
-	}
-
-	return []*ec2.TagSpecification{
-		{
-			ResourceType: aws.String("transit-gateway-route-table"),
-			Tags:         tagsFromMap(m),
-		},
+		return transitGatewayPeeringAttachment, aws.StringValue(transitGatewayPeeringAttachment.State), nil
 	}
 }
 
@@ -618,12 +583,13 @@ func waitForEc2TransitGatewayPeeringAttachmentAcceptance(conn *ec2.EC2, transitG
 func waitForEc2TransitGatewayPeeringAttachmentCreation(conn *ec2.EC2, transitGatewayAttachmentID string) error {
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{
+			ec2.TransitGatewayAttachmentStateFailing,
 			ec2.TransitGatewayAttachmentStatePending,
 			"initiatingRequest", // No ENUM currently exists in the SDK for the state given by AWS
 		},
 		Target: []string{
-			ec2.TransitGatewayAttachmentStatePendingAcceptance,
 			ec2.TransitGatewayAttachmentStateAvailable,
+			ec2.TransitGatewayAttachmentStatePendingAcceptance,
 		},
 		Refresh: ec2TransitGatewayPeeringAttachmentRefreshFunc(conn, transitGatewayAttachmentID),
 		Timeout: 10 * time.Minute,

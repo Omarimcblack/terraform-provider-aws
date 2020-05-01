@@ -8,13 +8,7 @@ description: |-
 
 # Resource: aws_ec2_transit_gateway_peering_attachment_accepter
 
-Manages the accepter's side of an EC2 Transit Gateway peering Attachment.
-
-When a cross-account (requester's AWS account differs from the accepter's AWS account) EC2 Transit Gateway peering Attachment
-is created, an EC2 Transit Gateway peering Attachment resource is automatically created in the accepter's account.
-The requester can use the `aws_ec2_transit_gateway_peering_attachment` resource to manage its side of the connection
-and the accepter can use the `aws_ec2_transit_gateway_peering_attachment_accepter` resource to "adopt" its side of the
-connection into management.
+Manages the accepter's side of an EC2 Transit Gateway Peering Attachment.
 
 ## Example Usage
 
@@ -34,8 +28,8 @@ A full example of how to create a Transit Gateway in one AWS account, share it w
 
 The following arguments are supported:
 
-* `transit_gateway_attachment_id` - (Required) The ID of the EC2 Transit Gateway Attachment to manage.
-* `tags` - (Optional) Key-value tags for the EC2 Transit Gateway peering Attachment.
+* `transit_gateway_attachment_id` - (Required) The ID of the EC2 Transit Gateway Peering Attachment to manage.
+* `tags` - (Optional) Key-value tags for the EC2 Transit Gateway Peering Attachment.
 
 ## Attribute Reference
 
