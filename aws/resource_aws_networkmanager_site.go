@@ -83,13 +83,13 @@ func resourceAwsNetworkManagerSiteCreate(d *schema.ResourceData, meta interface{
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{networkmanager.SiteStatePending},
 		Target:  []string{networkmanager.CustomerGatewayAssociationStateAvailable},
-		Refresh: networkmanagerSiteRefreshFunc(conn, aws.StringValue(output.Site.SiteId)),
+		Refresh: networkmanagerSiteRefreshFunc(conn, aws.StringValue(output.Site.GlobalNetworkId), aws.StringValue(output.Site.SiteId)),
 		Timeout: 10 * time.Minute,
 	}
 
 	_, err = stateConf.WaitForState()
 	if err != nil {
-		return fmt.Errorf("error waiting for networkmanager Global Network (%s) availability: %s", d.Id(), err)
+		return fmt.Errorf("error waiting for networkmanager Site (%s) availability: %s", d.Id(), err)
 	}
 
 	return resourceAwsNetworkManagerSiteRead(d, meta)
@@ -99,26 +99,26 @@ func resourceAwsNetworkManagerSiteRead(d *schema.ResourceData, meta interface{})
 	conn := meta.(*AWSClient).networkmanagerconn
 	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
 
-	site, err := networkmanagerDescribeSite(conn, d.Id())
+	site, err := networkmanagerDescribeSite(conn, d.Get("global_network_id").(string), d.Id())
 
 	if isAWSErr(err, "InvalidSiteID.NotFound", "") {
-		log.Printf("[WARN] networkmanager Global Network (%s) not found, removing from state", d.Id())
+		log.Printf("[WARN] networkmanager Site (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
 	}
 
 	if err != nil {
-		return fmt.Errorf("error reading networkmanager Global Network: %s", err)
+		return fmt.Errorf("error reading networkmanager Site: %s", err)
 	}
 
 	if site == nil {
-		log.Printf("[WARN] networkmanager Global Network (%s) not found, removing from state", d.Id())
+		log.Printf("[WARN] networkmanager Site (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
 	}
 
 	if aws.StringValue(site.State) == networkmanager.SiteStateDeleting {
-		log.Printf("[WARN] networkmanager Global Network (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(site.State))
+		log.Printf("[WARN] networkmanager Site (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(site.State))
 		d.SetId("")
 		return nil
 	}
@@ -140,7 +140,7 @@ func resourceAwsNetworkManagerSiteUpdate(d *schema.ResourceData, meta interface{
 		o, n := d.GetChange("tags")
 
 		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Id(), o, n); err != nil {
-			return fmt.Errorf("error updating networkmanager Global Network (%s) tags: %s", d.Id(), err)
+			return fmt.Errorf("error updating networkmanager Site (%s) tags: %s", d.Id(), err)
 		}
 	}
 
@@ -151,10 +151,11 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	conn := meta.(*AWSClient).networkmanagerconn
 
 	input := &networkmanager.DeleteSiteInput{
+		GlobalNetworkId: aws.String( d.Get("global_network_id").(string)),
 		SiteId: aws.String(d.Id()),
 	}
 
-	log.Printf("[DEBUG] Deleting networkmanager Global Network (%s): %s", d.Id(), input)
+	log.Printf("[DEBUG] Deleting networkmanager Site (%s): %s", d.Id(), input)
 	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
 		_, err := conn.DeleteSite(input)
 
@@ -194,11 +195,11 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	}
 
 	if err != nil {
-		return fmt.Errorf("error deleting networkmanager Global Network: %s", err)
+		return fmt.Errorf("error deleting networkmanager Site: %s", err)
 	}
 
 	if err := waitForNetworkManagerSiteDeletion(conn, d.Id()); err != nil {
-		return fmt.Errorf("error waiting for networkmanager Global Network (%s) deletion: %s", d.Id(), err)
+		return fmt.Errorf("error waiting for networkmanager Site (%s) deletion: %s", d.Id(), err)
 	}
 
 	return nil
@@ -217,16 +218,16 @@ func resourceAwsAwsNetworkManagerSiteLocation(d *schema.ResourceData) *networkma
 	}
 }
 
-func networkmanagerSiteRefreshFunc(conn *networkmanager.NetworkManager, siteID string) resource.StateRefreshFunc {
+func networkmanagerSiteRefreshFunc(conn *networkmanager.NetworkManager, globalNetworkID, siteID string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		site, err := networkmanagerDescribeSite(conn, siteID)
+		site, err := networkmanagerDescribeSite(conn, globalNetworkID, siteID)
 
 		if isAWSErr(err, "InvalidSiteID.NotFound", "") {
 			return nil, "DELETED", nil
 		}
 
 		if err != nil {
-			return nil, "", fmt.Errorf("error reading NetworkManager Global Network (%s): %s", siteID, err)
+			return nil, "", fmt.Errorf("error reading NetworkManager Site (%s): %s", siteID, err)
 		}
 
 		if site == nil {
@@ -237,12 +238,13 @@ func networkmanagerSiteRefreshFunc(conn *networkmanager.NetworkManager, siteID s
 	}
 }
 
-func networkmanagerDescribeSite(conn *networkmanager.NetworkManager, siteID string) (*networkmanager.Site, error) {
-	input := &networkmanager.DescribeSitesInput{
-		SiteIds: []*string{aws.String(siteID)},
+func networkmanagerDescribeSite(conn *networkmanager.NetworkManager, globalNetworkID, siteID string) (*networkmanager.Site, error) {
+	input := &networkmanager.GetSitesInput{
+		GlobalNetworkId: aws.String(globalNetworkID),
+		SiteIds:         []*string{aws.String(siteID)},
 	}
 
-	log.Printf("[DEBUG] Reading NetworkManager Global Network (%s): %s", siteID, input)
+	log.Printf("[DEBUG] Reading NetworkManager Site (%s): %s", siteID, input)
 	for {
 		output, err := conn.DescribeSites(input)
 
