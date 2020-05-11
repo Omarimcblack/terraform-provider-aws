@@ -88,9 +88,7 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "arn"),
 					resource.TestCheckResourceAttr(resourceName, "description", "test"),
 					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetworkResourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "location.5353534230.address", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.5353534230.latitude", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.5353534230.longitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.#", "0"),
 				),
 			},
 			{
@@ -99,7 +97,7 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 				ImportStateVerify: true,
 			},
 			{
-				Config: testAccNetworkManagerSiteConfig_Update("test updated"),
+				Config: testAccNetworkManagerSiteConfig_Update("test updated", "18.0029784", "-76.7897987"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsNetworkManagerSiteExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "arn"),
@@ -107,8 +105,8 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetworkResourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "location.#", "1"),
 					resource.TestCheckResourceAttr(resourceName, "location.2309385343.address", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.2309385343.latitude", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.2309385343.longitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.2309385343.latitude", "18.0029784"),
+					resource.TestCheckResourceAttr(resourceName, "location.2309385343.longitude", "-76.7897987"),
 				),
 			},
 		},
@@ -262,7 +260,7 @@ resource "aws_networkmanager_site" "test" {
 `, description, tagKey1, tagValue1, tagKey2, tagValue2)
 }
 
-func testAccNetworkManagerSiteConfig_Update(description string) string {
+func testAccNetworkManagerSiteConfig_Update(description, latitude, longitude string) string {
 	return fmt.Sprintf(`
 resource "aws_networkmanager_global_network" "test" {
  description = "test"
@@ -271,8 +269,13 @@ resource "aws_networkmanager_global_network" "test" {
 resource "aws_networkmanager_site" "test" {
  description       = %q
  global_network_id = "${aws_networkmanager_global_network.test.id}"
+
+ location {
+  latitude  = %q	
+  longitude = %q
+ }
 }
-`, description)
+`, description, latitude, longitude)
 }
 
 //need to add location tests

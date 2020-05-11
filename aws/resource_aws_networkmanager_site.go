@@ -68,7 +68,7 @@ func resourceAwsNetworkManagerSiteCreate(d *schema.ResourceData, meta interface{
 	input := &networkmanager.CreateSiteInput{
 		Description:     aws.String(d.Get("description").(string)),
 		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
-		Location:        resourceAwsAwsNetworkManagerSiteLocation(d),
+		Location:        resourceAwsNetworkManagerSiteLocation(d),
 		Tags:            keyvaluetags.New(d.Get("tags").(map[string]interface{})).IgnoreAws().NetworkmanagerTags(),
 	}
 
@@ -79,6 +79,7 @@ func resourceAwsNetworkManagerSiteCreate(d *schema.ResourceData, meta interface{
 	}
 
 	d.SetId(aws.StringValue(output.Site.SiteId))
+	d.Set("global_network_id", aws.StringValue(output.Site.GlobalNetworkId))
 
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{networkmanager.SiteStatePending},
@@ -125,7 +126,6 @@ func resourceAwsNetworkManagerSiteRead(d *schema.ResourceData, meta interface{})
 
 	d.Set("arn", site.SiteArn)
 	d.Set("description", site.Description)
-	d.Set("global_network_id", site.GlobalNetworkId)
 	d.Set("location", site.Location)
 
 	if err := d.Set("tags", keyvaluetags.NetworkmanagerKeyValueTags(site.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
@@ -195,7 +195,7 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	return nil
 }
 
-func resourceAwsAwsNetworkManagerSiteLocation(d *schema.ResourceData) *networkmanager.Location {
+func resourceAwsNetworkManagerSiteLocation(d *schema.ResourceData) *networkmanager.Location {
 	count := d.Get("location.#").(int)
 	if count == 0 {
 		return nil
