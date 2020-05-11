@@ -89,7 +89,7 @@ func resourceAwsNetworkManagerSiteCreate(d *schema.ResourceData, meta interface{
 
 	_, err = stateConf.WaitForState()
 	if err != nil {
-		return fmt.Errorf("error waiting for networkmanager Site (%s) availability: %s", d.Id(), err)
+		return fmt.Errorf("error waiting for Network Manager Site (%s) availability: %s", d.Id(), err)
 	}
 
 	return resourceAwsNetworkManagerSiteRead(d, meta)
@@ -102,29 +102,31 @@ func resourceAwsNetworkManagerSiteRead(d *schema.ResourceData, meta interface{})
 	site, err := networkmanagerDescribeSite(conn, d.Get("global_network_id").(string), d.Id())
 
 	if isAWSErr(err, "InvalidSiteID.NotFound", "") {
-		log.Printf("[WARN] networkmanager Site (%s) not found, removing from state", d.Id())
+		log.Printf("[WARN] Network Manager Site (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
 	}
 
 	if err != nil {
-		return fmt.Errorf("error reading networkmanager Site: %s", err)
+		return fmt.Errorf("error reading Network Manager Site: %s", err)
 	}
 
 	if site == nil {
-		log.Printf("[WARN] networkmanager Site (%s) not found, removing from state", d.Id())
+		log.Printf("[WARN] Network Manager Site (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
 	}
 
 	if aws.StringValue(site.State) == networkmanager.SiteStateDeleting {
-		log.Printf("[WARN] networkmanager Site (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(site.State))
+		log.Printf("[WARN] Network Manager Site (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(site.State))
 		d.SetId("")
 		return nil
 	}
 
 	d.Set("arn", site.SiteArn)
 	d.Set("description", site.Description)
+	d.Set("global_network_id", site.GlobalNetworkId)
+	d.Set("location", site.Location)
 
 	if err := d.Set("tags", keyvaluetags.NetworkmanagerKeyValueTags(site.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
 		return fmt.Errorf("error setting tags: %s", err)
@@ -140,7 +142,7 @@ func resourceAwsNetworkManagerSiteUpdate(d *schema.ResourceData, meta interface{
 		o, n := d.GetChange("tags")
 
 		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Id(), o, n); err != nil {
-			return fmt.Errorf("error updating networkmanager Site (%s) tags: %s", d.Id(), err)
+			return fmt.Errorf("error updating Network Manager Site (%s) tags: %s", d.Id(), err)
 		}
 	}
 
@@ -151,31 +153,19 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	conn := meta.(*AWSClient).networkmanagerconn
 
 	input := &networkmanager.DeleteSiteInput{
-		GlobalNetworkId: aws.String( d.Get("global_network_id").(string)),
-		SiteId: aws.String(d.Id()),
+		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
+		SiteId:          aws.String(d.Id()),
 	}
 
-	log.Printf("[DEBUG] Deleting networkmanager Site (%s): %s", d.Id(), input)
+	log.Printf("[DEBUG] Deleting Network Manager Site (%s): %s", d.Id(), input)
 	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
 		_, err := conn.DeleteSite(input)
 
-		if isAWSErr(err, "IncorrectState", "has non-deleted Transit Gateway Registrations") {
-			return resource.RetryableError(err)
-		}
-
-		if isAWSErr(err, "IncorrectState", "has non-deleted Customer Gateway Associations") {
+		if isAWSErr(err, "IncorrectState", "has non-deleted Link Associations") {
 			return resource.RetryableError(err)
 		}
 
 		if isAWSErr(err, "IncorrectState", "has non-deleted Device") {
-			return resource.RetryableError(err)
-		}
-
-		if isAWSErr(err, "IncorrectState", "has non-deleted Link") {
-			return resource.RetryableError(err)
-		}
-
-		if isAWSErr(err, "IncorrectState", "has non-deleted Site") {
 			return resource.RetryableError(err)
 		}
 
@@ -195,11 +185,11 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	}
 
 	if err != nil {
-		return fmt.Errorf("error deleting networkmanager Site: %s", err)
+		return fmt.Errorf("error deleting Network Manager Site: %s", err)
 	}
 
-	if err := waitForNetworkManagerSiteDeletion(conn, d.Id()); err != nil {
-		return fmt.Errorf("error waiting for networkmanager Site (%s) deletion: %s", d.Id(), err)
+	if err := waitForNetworkManagerSiteDeletion(conn, d.Get("global_network_id").(string), d.Id()); err != nil {
+		return fmt.Errorf("error waiting for Network Manager Site (%s) deletion: %s", d.Id(), err)
 	}
 
 	return nil
@@ -227,7 +217,7 @@ func networkmanagerSiteRefreshFunc(conn *networkmanager.NetworkManager, globalNe
 		}
 
 		if err != nil {
-			return nil, "", fmt.Errorf("error reading NetworkManager Site (%s): %s", siteID, err)
+			return nil, "", fmt.Errorf("error reading Network Manager Site (%s): %s", siteID, err)
 		}
 
 		if site == nil {
@@ -244,9 +234,9 @@ func networkmanagerDescribeSite(conn *networkmanager.NetworkManager, globalNetwo
 		SiteIds:         []*string{aws.String(siteID)},
 	}
 
-	log.Printf("[DEBUG] Reading NetworkManager Site (%s): %s", siteID, input)
+	log.Printf("[DEBUG] Reading Network Manager Site (%s): %s", siteID, input)
 	for {
-		output, err := conn.DescribeSites(input)
+		output, err := conn.GetSites(input)
 
 		if err != nil {
 			return nil, err
@@ -276,19 +266,19 @@ func networkmanagerDescribeSite(conn *networkmanager.NetworkManager, globalNetwo
 	return nil, nil
 }
 
-func waitForNetworkManagerSiteDeletion(conn *networkmanager.NetworkManager, siteID string) error {
+func waitForNetworkManagerSiteDeletion(conn *networkmanager.NetworkManager, globalNetworkID, siteID string) error {
 	stateConf := &resource.StateChangeConf{
 		Pending: []string{
 			networkmanager.SiteStateAvailable,
 			networkmanager.SiteStateDeleting,
 		},
 		Target:         []string{""},
-		Refresh:        networkmanagerSiteRefreshFunc(conn, siteID),
+		Refresh:        networkmanagerSiteRefreshFunc(conn, globalNetworkID, siteID),
 		Timeout:        10 * time.Minute,
 		NotFoundChecks: 1,
 	}
 
-	log.Printf("[DEBUG] Waiting for NetworkManager Transit Gateway (%s) deletion", siteID)
+	log.Printf("[DEBUG] Waiting for Network Manager Site (%s) deletion", siteID)
 	_, err := stateConf.WaitForState()
 
 	if isResourceNotFoundError(err) {

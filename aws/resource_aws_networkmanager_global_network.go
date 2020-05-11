@@ -250,7 +250,7 @@ func waitForNetworkManagerGlobalNetworkDeletion(conn *networkmanager.NetworkMana
 		NotFoundChecks: 1,
 	}
 
-	log.Printf("[DEBUG] Waiting for NetworkManager Transit Gateway (%s) deletion", globalNetworkID)
+	log.Printf("[DEBUG] Waiting for NetworkManager Global Network (%s) deletion", globalNetworkID)
 	_, err := stateConf.WaitForState()
 
 	if isResourceNotFoundError(err) {
