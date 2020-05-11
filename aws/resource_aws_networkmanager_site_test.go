@@ -3,7 +3,6 @@ package aws
 import (
 	"fmt"
 	"log"
-	"regexp"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -26,14 +25,14 @@ func testSweepNetworkManagerSite(region string) error {
 		return fmt.Errorf("error getting client: %s", err)
 	}
 	conn := client.(*AWSClient).networkmanagerconn
-	input := &networkmanager.GetSitesInput{}
 	var sweeperErrs *multierror.Error
 
-	err = conn.GetSitesPages(input,
+	err = conn.GetSitesPages(&networkmanager.GetSitesInput{},
 		func(page *networkmanager.GetSitesOutput, lastPage bool) bool {
 			for _, site := range page.Sites {
 				input := &networkmanager.DeleteSiteInput{
-					SiteId: site.SiteId,
+					GlobalNetworkId: site.GlobalNetworkId,
+					SiteId:          site.SiteId,
 				}
 				id := aws.StringValue(site.SiteId)
 				globalNetworkID := aws.StringValue(site.GlobalNetworkId)
@@ -86,12 +85,12 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 				Config: testAccNetworkManagerSiteConfig("test"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsNetworkManagerSiteExists(resourceName),
-					testAccMatchResourceAttrGlobalARN(resourceName, "arn", "networkmanager", regexp.MustCompile(`global-network/global-network-.+`)),
+					resource.TestCheckResourceAttrSet(resourceName, "arn"),
 					resource.TestCheckResourceAttr(resourceName, "description", "test"),
 					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetworkResourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "location.0.address", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.0.latitude", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.0.longitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.5353534230.address", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.5353534230.latitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.5353534230.longitude", ""),
 				),
 			},
 			{
@@ -103,12 +102,13 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 				Config: testAccNetworkManagerSiteConfig_Update("test updated"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsNetworkManagerSiteExists(resourceName),
-					testAccMatchResourceAttrGlobalARN(resourceName, "arn", "networkmanager", regexp.MustCompile(`global-network/global-network-.+`)),
+					resource.TestCheckResourceAttrSet(resourceName, "arn"),
 					resource.TestCheckResourceAttr(resourceName, "description", "test updated"),
 					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetworkResourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "location.0.address", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.0.latitude", ""),
-					resource.TestCheckResourceAttr(resourceName, "location.0.longitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "location.2309385343.address", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.2309385343.latitude", ""),
+					resource.TestCheckResourceAttr(resourceName, "location.2309385343.longitude", ""),
 				),
 			},
 		},
@@ -216,7 +216,9 @@ func testAccCheckAwsNetworkManagerSiteExists(name string) resource.TestCheckFunc
 
 func testAccNetworkManagerSiteConfig(description string) string {
 	return fmt.Sprintf(`
-resource "aws_networkmanager_global_network" "test" {}
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
+}
 
 resource "aws_networkmanager_site" "test" {
  description       = %q
@@ -227,7 +229,9 @@ resource "aws_networkmanager_site" "test" {
 
 func testAccNetworkManagerSiteConfigTags1(description, tagKey1, tagValue1 string) string {
 	return fmt.Sprintf(`
-resource "aws_networkmanager_global_network" "test" {}
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
+}
 
 resource "aws_networkmanager_site" "test" {
  description       = %q
@@ -242,7 +246,9 @@ resource "aws_networkmanager_site" "test" {
 
 func testAccNetworkManagerSiteConfigTags2(description, tagKey1, tagValue1, tagKey2, tagValue2 string) string {
 	return fmt.Sprintf(`
-resource "aws_networkmanager_global_network" "test" {}
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
+}
 
 resource "aws_networkmanager_site" "test" {
  description       = %q
@@ -258,7 +264,9 @@ resource "aws_networkmanager_site" "test" {
 
 func testAccNetworkManagerSiteConfig_Update(description string) string {
 	return fmt.Sprintf(`
-resource "aws_networkmanager_global_network" "test" {}
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
+}
 
 resource "aws_networkmanager_site" "test" {
  description       = %q
