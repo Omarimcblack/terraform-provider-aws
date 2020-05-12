@@ -1,261 +1,325 @@
-// package aws
+package aws
 
-// import (
-// 	"fmt"
-// 	"log"
-// 	"time"
+import (
+	"fmt"
+	"log"
+	"strings"
+	"time"
 
-// 	"github.com/aws/aws-sdk-go/aws"
-// 	"github.com/aws/aws-sdk-go/service/networkmanager"
-// 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-// 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-// 	"github.com/terraform-providers/terraform-provider-aws/aws/internal/keyvaluetags"
-// )
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/arn"
+	"github.com/aws/aws-sdk-go/service/networkmanager"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/terraform-providers/terraform-provider-aws/aws/internal/keyvaluetags"
+)
 
-// func resourceAwsNetworkManagerLink() *schema.Resource {
-// 	return &schema.Resource{
-// 		Create: resourceAwsNetworkManagerLinkCreate,
-// 		Read:   resourceAwsNetworkManagerLinkRead,
-// 		Update: resourceAwsNetworkManagerLinkUpdate,
-// 		Delete: resourceAwsNetworkManagerLinkDelete,
-// 		Importer: &schema.ResourceImporter{
-// 			State: schema.ImportStatePassthrough,
-// 		},
+func resourceAwsNetworkManagerLink() *schema.Resource {
+	return &schema.Resource{
+		Create: resourceAwsNetworkManagerLinkCreate,
+		Read:   resourceAwsNetworkManagerLinkRead,
+		Update: resourceAwsNetworkManagerLinkUpdate,
+		Delete: resourceAwsNetworkManagerLinkDelete,
+		Importer: &schema.ResourceImporter{
+			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+				d.Set("arn", d.Id())
 
-// 		Schema: map[string]*schema.Schema{
-// 			"arn": {
-// 				Type:     schema.TypeString,
-// 				Computed: true,
-// 			},
-// 			"description": {
-// 				Type:     schema.TypeString,
-// 				Optional: true,
-// 				ForceNew: true,
-// 			},
-// 			"tags": tagsSchema(),
-// 		},
-// 	}
-// }
+				idErr := fmt.Errorf("Expected ID in format of arn:aws:networkmanager::ACCOUNTID:link/GLOBALNETWORKID/LINKID and provided: %s", d.Id())
 
-// func resourceAwsNetworkManagerLinkCreate(d *schema.ResourceData, meta interface{}) error {
-// 	conn := meta.(*AWSClient).networkmanagerconn
+				resARN, err := arn.Parse(d.Id())
+				if err != nil {
+					return nil, idErr
+				}
 
-// 	input := &networkmanager.CreateLinkInput{
-// 		Description: aws.String(d.Get("description").(string)),
-// 		Tags:        keyvaluetags.New(d.Get("tags").(map[string]interface{})).IgnoreAws().NetworkmanagerTags(),
-// 	}
+				identifiers := strings.TrimPrefix(resARN.Resource, "link/")
+				identifierParts := strings.Split(identifiers, "/")
+				if len(identifierParts) != 2 {
+					return nil, idErr
+				}
+				d.SetId(identifierParts[1])
+				d.Set("global_network_id", identifierParts[0])
 
-// 	if v, ok := d.GetOk("description"); ok {
-// 		input.Description = aws.String(v.(string))
-// 	}
+				return []*schema.ResourceData{d}, nil
+			},
+		},
 
-// 	log.Printf("[DEBUG] Creating Network Manager Global Network: %s", input)
-// 	output, err := conn.CreateLink(input)
-// 	if err != nil {
-// 		return fmt.Errorf("error creating Network Manager Global Network: %s", err)
-// 	}
+		Schema: map[string]*schema.Schema{
+			"arn": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"description": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"global_network_id": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"bandwidth": {
+				Type:     schema.TypeList,
+				Required: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"download_speed": {
+							Type:     schema.TypeInt,
+							Optional: true,
+						},
+						"upload_speed": {
+							Type:     schema.TypeInt,
+							Optional: true,
+						},
+					},
+				},
+			},
+			"service_provider": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"site_id": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"tags": tagsSchema(),
+			"type": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+		},
+	}
+}
 
-// 	d.SetId(aws.StringValue(output.Link.LinkId))
+func resourceAwsNetworkManagerLinkCreate(d *schema.ResourceData, meta interface{}) error {
+	conn := meta.(*AWSClient).networkmanagerconn
 
-// 	stateConf := &resource.StateChangeConf{
-// 		Pending: []string{networkmanager.LinkStatePending},
-// 		Target:  []string{networkmanager.CustomerGatewayAssociationStateAvailable},
-// 		Refresh: networkmanagerLinkRefreshFunc(conn, aws.StringValue(output.Link.LinkId)),
-// 		Timeout: 10 * time.Minute,
-// 	}
+	input := &networkmanager.CreateLinkInput{
+		Bandwidth:       resourceAwsNetworkManagerLinkBandwidth(d),
+		Description:     aws.String(d.Get("description").(string)),
+		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
+		Provider:        aws.String(d.Get("service_provider").(string)),
+		SiteId:          aws.String(d.Get("site_id").(string)),
+		Tags:            keyvaluetags.New(d.Get("tags").(map[string]interface{})).IgnoreAws().NetworkmanagerTags(),
+		Type:            aws.String(d.Get("type").(string)),
+	}
 
-// 	_, err = stateConf.WaitForState()
-// 	if err != nil {
-// 		return fmt.Errorf("error waiting for networkmanager Global Network (%s) availability: %s", d.Id(), err)
-// 	}
+	log.Printf("[DEBUG] Creating Network Manager Link: %s", input)
+	output, err := conn.CreateLink(input)
+	if err != nil {
+		return fmt.Errorf("error creating Network Manager Link: %s", err)
+	}
 
-// 	return resourceAwsNetworkManagerLinkRead(d, meta)
-// }
+	d.SetId(aws.StringValue(output.Link.LinkId))
+	// d.Set("global_network_id", aws.StringValue(output.Link.GlobalNetworkId))
 
-// func resourceAwsNetworkManagerLinkRead(d *schema.ResourceData, meta interface{}) error {
-// 	conn := meta.(*AWSClient).networkmanagerconn
-// 	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{networkmanager.LinkStatePending},
+		Target:  []string{networkmanager.LinkStateAvailable},
+		Refresh: networkmanagerLinkRefreshFunc(conn, aws.StringValue(output.Link.GlobalNetworkId), aws.StringValue(output.Link.LinkId)),
+		Timeout: 10 * time.Minute,
+	}
 
-// 	link, err := networkmanagerDescribeLink(conn, d.Id())
+	_, err = stateConf.WaitForState()
+	if err != nil {
+		return fmt.Errorf("error waiting for Network Manager Link (%s) availability: %s", d.Id(), err)
+	}
 
-// 	if isAWSErr(err, "InvalidLinkID.NotFound", "") {
-// 		log.Printf("[WARN] networkmanager Global Network (%s) not found, removing from state", d.Id())
-// 		d.SetId("")
-// 		return nil
-// 	}
+	return resourceAwsNetworkManagerLinkRead(d, meta)
+}
 
-// 	if err != nil {
-// 		return fmt.Errorf("error reading networkmanager Global Network: %s", err)
-// 	}
+func resourceAwsNetworkManagerLinkRead(d *schema.ResourceData, meta interface{}) error {
+	conn := meta.(*AWSClient).networkmanagerconn
+	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
 
-// 	if link == nil {
-// 		log.Printf("[WARN] networkmanager Global Network (%s) not found, removing from state", d.Id())
-// 		d.SetId("")
-// 		return nil
-// 	}
+	link, err := networkmanagerDescribeLink(conn, d.Get("global_network_id").(string), d.Id())
 
-// 	if aws.StringValue(link.State) == networkmanager.LinkStateDeleting {
-// 		log.Printf("[WARN] networkmanager Global Network (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(link.State))
-// 		d.SetId("")
-// 		return nil
-// 	}
+	if isAWSErr(err, "InvalidLinkID.NotFound", "") {
+		log.Printf("[WARN] Network Manager Link (%s) not found, removing from state", d.Id())
+		d.SetId("")
+		return nil
+	}
 
-// 	d.Set("arn", link.LinkArn)
-// 	d.Set("description", link.Description)
+	if err != nil {
+		return fmt.Errorf("error reading Network Manager Link: %s", err)
+	}
 
-// 	if err := d.Set("tags", keyvaluetags.NetworkmanagerKeyValueTags(link.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
-// 		return fmt.Errorf("error setting tags: %s", err)
-// 	}
+	if link == nil {
+		log.Printf("[WARN] Network Manager Link (%s) not found, removing from state", d.Id())
+		d.SetId("")
+		return nil
+	}
 
-// 	return nil
-// }
+	if aws.StringValue(link.State) == networkmanager.LinkStateDeleting {
+		log.Printf("[WARN] Network Manager Link (%s) in deleted state (%s), removing from state", d.Id(), aws.StringValue(link.State))
+		d.SetId("")
+		return nil
+	}
 
-// func resourceAwsNetworkManagerLinkUpdate(d *schema.ResourceData, meta interface{}) error {
-// 	conn := meta.(*AWSClient).networkmanagerconn
+	d.Set("arn", link.LinkArn)
+	d.Set("bandwidth", link.Bandwidth)
+	d.Set("description", link.Description)
+	d.Set("service_provider", link.Provider)
+	d.Set("site_id", link.SiteId)
+	d.Set("type", link.Type)
 
-// 	if d.HasChange("tags") {
-// 		o, n := d.GetChange("tags")
+	if err := d.Set("tags", keyvaluetags.NetworkmanagerKeyValueTags(link.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
+		return fmt.Errorf("error setting tags: %s", err)
+	}
 
-// 		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Id(), o, n); err != nil {
-// 			return fmt.Errorf("error updating networkmanager Global Network (%s) tags: %s", d.Id(), err)
-// 		}
-// 	}
+	return nil
+}
 
-// 	return nil
-// }
+func resourceAwsNetworkManagerLinkUpdate(d *schema.ResourceData, meta interface{}) error {
+	conn := meta.(*AWSClient).networkmanagerconn
 
-// func resourceAwsNetworkManagerLinkDelete(d *schema.ResourceData, meta interface{}) error {
-// 	conn := meta.(*AWSClient).networkmanagerconn
+	if d.HasChange("tags") {
+		o, n := d.GetChange("tags")
 
-// 	input := &networkmanager.DeleteLinkInput{
-// 		LinkId: aws.String(d.Id()),
-// 	}
+		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Get("arn").(string), o, n); err != nil {
+			return fmt.Errorf("error updating Network Manager Link (%s) tags: %s", d.Id(), err)
+		}
+	}
 
-// 	log.Printf("[DEBUG] Deleting networkmanager Global Network (%s): %s", d.Id(), input)
-// 	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
-// 		_, err := conn.DeleteLink(input)
+	return nil
+}
 
-// 		if isAWSErr(err, "IncorrectState", "has non-deleted Transit Gateway Registrations") {
-// 			return resource.RetryableError(err)
-// 		}
+func resourceAwsNetworkManagerLinkDelete(d *schema.ResourceData, meta interface{}) error {
+	conn := meta.(*AWSClient).networkmanagerconn
 
-// 		if isAWSErr(err, "IncorrectState", "has non-deleted Customer Gateway Associations") {
-// 			return resource.RetryableError(err)
-// 		}
+	input := &networkmanager.DeleteLinkInput{
+		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
+		LinkId:          aws.String(d.Id()),
+	}
 
-// 		if isAWSErr(err, "IncorrectState", "has non-deleted Device") {
-// 			return resource.RetryableError(err)
-// 		}
+	log.Printf("[DEBUG] Deleting Network Manager Link (%s): %s", d.Id(), input)
+	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
+		_, err := conn.DeleteLink(input)
 
-// 		if isAWSErr(err, "IncorrectState", "has non-deleted Link") {
-// 			return resource.RetryableError(err)
-// 		}
+		if isAWSErr(err, "IncorrectState", "has non-deleted Link Associations") {
+			return resource.RetryableError(err)
+		}
 
-// 		if isAWSErr(err, "IncorrectState", "has non-deleted Site") {
-// 			return resource.RetryableError(err)
-// 		}
+		if isAWSErr(err, "IncorrectState", "has non-deleted Device") {
+			return resource.RetryableError(err)
+		}
 
-// 		if err != nil {
-// 			return resource.NonRetryableError(err)
-// 		}
+		if err != nil {
+			return resource.NonRetryableError(err)
+		}
 
-// 		return nil
-// 	})
+		return nil
+	})
 
-// 	if isResourceTimeoutError(err) {
-// 		_, err = conn.DeleteLink(input)
-// 	}
+	if isResourceTimeoutError(err) {
+		_, err = conn.DeleteLink(input)
+	}
 
-// 	if isAWSErr(err, "InvalidLinkID.NotFound", "") {
-// 		return nil
-// 	}
+	if isAWSErr(err, "InvalidLinkID.NotFound", "") {
+		return nil
+	}
 
-// 	if err != nil {
-// 		return fmt.Errorf("error deleting networkmanager Global Network: %s", err)
-// 	}
+	if err != nil {
+		return fmt.Errorf("error deleting Network Manager Link: %s", err)
+	}
 
-// 	if err := waitForNetworkManagerLinkDeletion(conn, d.Id()); err != nil {
-// 		return fmt.Errorf("error waiting for networkmanager Global Network (%s) deletion: %s", d.Id(), err)
-// 	}
+	if err := waitForNetworkManagerLinkDeletion(conn, d.Get("global_network_id").(string), d.Id()); err != nil {
+		return fmt.Errorf("error waiting for Network Manager Link (%s) deletion: %s", d.Id(), err)
+	}
 
-// 	return nil
-// }
+	return nil
+}
 
-// func networkmanagerLinkRefreshFunc(conn *networkmanager.NetworkManager, linkID string) resource.StateRefreshFunc {
-// 	return func() (interface{}, string, error) {
-// 		link, err := networkmanagerDescribeLink(conn, linkID)
+func resourceAwsNetworkManagerLinkBandwidth(d *schema.ResourceData) *networkmanager.Bandwidth {
+	count := d.Get("bandwidth.#").(int)
+	if count == 0 {
+		return nil
+	}
 
-// 		if isAWSErr(err, "InvalidLinkID.NotFound", "") {
-// 			return nil, "DELETED", nil
-// 		}
+	return &networkmanager.Bandwidth{
+		DownloadSpeed: aws.Int64(int64(d.Get("bandwidth.0.download_speed").(int))),
+		UploadSpeed:   aws.Int64(int64(d.Get("bandwidth.0.upload_speed").(int))),
+	}
+}
 
-// 		if err != nil {
-// 			return nil, "", fmt.Errorf("error reading NetworkManager Global Network (%s): %s", linkID, err)
-// 		}
+func networkmanagerLinkRefreshFunc(conn *networkmanager.NetworkManager, globalNetworkID, linkID string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		link, err := networkmanagerDescribeLink(conn, globalNetworkID, linkID)
 
-// 		if link == nil {
-// 			return nil, "DELETED", nil
-// 		}
+		if isAWSErr(err, "InvalidLinkID.NotFound", "") {
+			return nil, "DELETED", nil
+		}
 
-// 		return link, aws.StringValue(link.State), nil
-// 	}
-// }
+		if err != nil {
+			return nil, "", fmt.Errorf("error reading Network Manager Link (%s): %s", linkID, err)
+		}
 
-// func networkmanagerDescribeLink(conn *networkmanager.NetworkManager, linkID string) (*networkmanager.Link, error) {
-// 	input := &networkmanager.DescribeLinksInput{
-// 		LinkIds: []*string{aws.String(linkID)},
-// 	}
+		if link == nil {
+			return nil, "DELETED", nil
+		}
 
-// 	log.Printf("[DEBUG] Reading NetworkManager Global Network (%s): %s", linkID, input)
-// 	for {
-// 		output, err := conn.DescribeLinks(input)
+		return link, aws.StringValue(link.State), nil
+	}
+}
 
-// 		if err != nil {
-// 			return nil, err
-// 		}
+func networkmanagerDescribeLink(conn *networkmanager.NetworkManager, globalNetworkID, linkID string) (*networkmanager.Link, error) {
+	input := &networkmanager.GetLinksInput{
+		GlobalNetworkId: aws.String(globalNetworkID),
+		LinkIds:         []*string{aws.String(linkID)},
+	}
 
-// 		if output == nil || len(output.Links) == 0 {
-// 			return nil, nil
-// 		}
+	log.Printf("[DEBUG] Reading Network Manager Link (%s): %s", linkID, input)
+	for {
+		output, err := conn.GetLinks(input)
 
-// 		for _, link := range output.Links {
-// 			if link == nil {
-// 				continue
-// 			}
+		if err != nil {
+			return nil, err
+		}
 
-// 			if aws.StringValue(link.LinkId) == linkID {
-// 				return link, nil
-// 			}
-// 		}
+		if output == nil || len(output.Links) == 0 {
+			return nil, nil
+		}
 
-// 		if aws.StringValue(output.NextToken) == "" {
-// 			break
-// 		}
+		for _, link := range output.Links {
+			if link == nil {
+				continue
+			}
 
-// 		input.NextToken = output.NextToken
-// 	}
+			if aws.StringValue(link.LinkId) == linkID {
+				return link, nil
+			}
+		}
 
-// 	return nil, nil
-// }
+		if aws.StringValue(output.NextToken) == "" {
+			break
+		}
 
-// func waitForNetworkManagerLinkDeletion(conn *networkmanager.NetworkManager, linkID string) error {
-// 	stateConf := &resource.StateChangeConf{
-// 		Pending: []string{
-// 			networkmanager.LinkStateAvailable,
-// 			networkmanager.LinkStateDeleting,
-// 		},
-// 		Target:         []string{""},
-// 		Refresh:        networkmanagerLinkRefreshFunc(conn, linkID),
-// 		Timeout:        10 * time.Minute,
-// 		NotFoundChecks: 1,
-// 	}
+		input.NextToken = output.NextToken
+	}
 
-// 	log.Printf("[DEBUG] Waiting for NetworkManager Transit Gateway (%s) deletion", linkID)
-// 	_, err := stateConf.WaitForState()
+	return nil, nil
+}
 
-// 	if isResourceNotFoundError(err) {
-// 		return nil
-// 	}
+func waitForNetworkManagerLinkDeletion(conn *networkmanager.NetworkManager, globalNetworkID, linkID string) error {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{
+			networkmanager.LinkStateAvailable,
+			networkmanager.LinkStateDeleting,
+		},
+		Target:         []string{""},
+		Refresh:        networkmanagerLinkRefreshFunc(conn, globalNetworkID, linkID),
+		Timeout:        10 * time.Minute,
+		NotFoundChecks: 1,
+	}
 
-// 	return err
-// }
+	log.Printf("[DEBUG] Waiting for Network Manager Link (%s) deletion", linkID)
+	_, err := stateConf.WaitForState()
+
+	if isResourceNotFoundError(err) {
+		return nil
+	}
+
+	return err
+}
