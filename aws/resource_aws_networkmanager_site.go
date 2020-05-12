@@ -59,7 +59,7 @@ func resourceAwsNetworkManagerSite() *schema.Resource {
 				ForceNew: true,
 			},
 			"location": {
-				Type:     schema.TypeSet,
+				Type:     schema.TypeList,
 				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
@@ -162,7 +162,7 @@ func resourceAwsNetworkManagerSiteUpdate(d *schema.ResourceData, meta interface{
 	if d.HasChange("tags") {
 		o, n := d.GetChange("tags")
 
-		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Id(), o, n); err != nil {
+		if err := keyvaluetags.NetworkmanagerUpdateTags(conn, d.Get("arn").(string), o, n); err != nil {
 			return fmt.Errorf("error updating Network Manager Site (%s) tags: %s", d.Id(), err)
 		}
 	}
