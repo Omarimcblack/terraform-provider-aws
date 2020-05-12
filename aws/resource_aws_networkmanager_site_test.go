@@ -171,7 +171,7 @@ func testAccCheckAwsNetworkManagerSiteDestroy(s *terraform.State) error {
 
 		site, err := networkmanagerDescribeSite(conn, rs.Primary.Attributes["global_network_id"], rs.Primary.ID)
 		if err != nil {
-			if isAWSErr(err, networkmanager.ErrCodeResourceNotFoundException, "") {
+			if isAWSErr(err, networkmanager.ErrCodeValidationException, "") {
 				return nil
 			}
 			return err
@@ -290,5 +290,3 @@ func testAccAWSNetworkManagerSiteImportStateIdFunc(resourceName string) resource
 		return rs.Primary.Attributes["arn"], nil
 	}
 }
-
-//need to add location tests
