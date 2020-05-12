@@ -3,9 +3,11 @@ package aws
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/service/networkmanager"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
@@ -19,7 +21,26 @@ func resourceAwsNetworkManagerSite() *schema.Resource {
 		Update: resourceAwsNetworkManagerSiteUpdate,
 		Delete: resourceAwsNetworkManagerSiteDelete,
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+				d.Set("arn", d.Id())
+
+				idErr := fmt.Errorf("Expected ID in format of arn:aws:networkmanager::ACCOUNTID:site/GLOBALNETWORKID/SITEID and provided: %s", d.Id())
+
+				resARN, err := arn.Parse(d.Id())
+				if err != nil {
+					return nil, idErr
+				}
+
+				identifiers := strings.TrimPrefix(resARN.Resource, "site/")
+				identifierParts := strings.Split(identifiers, "/")
+				if len(identifierParts) != 2 {
+					return nil, idErr
+				}
+				d.SetId(identifierParts[1])
+				d.Set("global_network_id", identifierParts[0])
+
+				return []*schema.ResourceData{d}, nil
+			},
 		},
 
 		Schema: map[string]*schema.Schema{

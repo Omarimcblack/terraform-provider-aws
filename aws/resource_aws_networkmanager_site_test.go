@@ -94,6 +94,7 @@ func TestAccAWSNetworkManagerSite_basic(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
+				ImportStateIdFunc: testAccAWSNetworkManagerSiteImportStateIdFunc(resourceName),
 				ImportStateVerify: true,
 			},
 			{
@@ -134,6 +135,7 @@ func TestAccAWSNetworkManagerSite_tags(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
+				ImportStateIdFunc: testAccAWSNetworkManagerSiteImportStateIdFunc(resourceName),
 				ImportStateVerify: true,
 			},
 			{
@@ -276,6 +278,17 @@ resource "aws_networkmanager_site" "test" {
  }
 }
 `, description, latitude, longitude)
+}
+
+func testAccAWSNetworkManagerSiteImportStateIdFunc(resourceName string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return "", fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		return rs.Primary.Attributes["arn"], nil
+	}
 }
 
 //need to add location tests
