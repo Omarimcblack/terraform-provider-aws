@@ -698,6 +698,7 @@ func Provider() terraform.ResourceProvider {
 			"aws_network_interface_attachment":                        resourceAwsNetworkInterfaceAttachment(),
 			"aws_networkmanager_device":                               resourceAwsNetworkManagerDevice(),
 			"aws_networkmanager_global_network":                       resourceAwsNetworkManagerGlobalNetwork(),
+			"aws_networkmanager_link":                                 resourceAwsNetworkManagerLink(),
 			"aws_networkmanager_site":                                 resourceAwsNetworkManagerSite(),
 			"aws_networkmanager_transit_gateway_registration":         resourceAwsNetworkManagerTransitGatewayRegistration(),
 			"aws_opsworks_application":                                resourceAwsOpsworksApplication(),
