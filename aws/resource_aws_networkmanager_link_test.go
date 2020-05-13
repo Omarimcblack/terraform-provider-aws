@@ -222,14 +222,13 @@ func testAccCheckAwsNetworkManagerLinkExists(name string) resource.TestCheckFunc
 }
 
 func testAccNetworkManagerLinkConfig(description string) string {
-	fmt.Println("MYDEBUG:	testAccNetworkManagerLinkConfig()")
 	return fmt.Sprintf(`
 resource "aws_networkmanager_global_network" "test" {
  description = "test"
 }
 
 resource "aws_networkmanager_site" "test" {
- description       = test
+ description       = "test"
  global_network_id = "${aws_networkmanager_global_network.test.id}"
 }
 
@@ -247,14 +246,13 @@ resource "aws_networkmanager_link" "test" {
 }
 
 func testAccNetworkManagerLinkConfigTags1(description, tagKey1, tagValue1 string) string {
-	fmt.Println("MYDEBUG:	testAccNetworkManagerLinkConfigTags1()")
 	return fmt.Sprintf(`
 resource "aws_networkmanager_global_network" "test" {
  description = "test"
 }
 
 resource "aws_networkmanager_site" "test" {
- description       = test
+ description       = "test"
  global_network_id = "${aws_networkmanager_global_network.test.id}"
 }
 
@@ -276,14 +274,13 @@ resource "aws_networkmanager_link" "test" {
 }
 
 func testAccNetworkManagerLinkConfigTags2(description, tagKey1, tagValue1, tagKey2, tagValue2 string) string {
-	fmt.Println("MYDEBUG:	testAccNetworkManagerLinkConfigTags2()")
 	return fmt.Sprintf(`
 resource "aws_networkmanager_global_network" "test" {
  description = "test"
 }
 
 resource "aws_networkmanager_site" "test" {
- description       = test
+ description       = "test"
  global_network_id = "${aws_networkmanager_global_network.test.id}"
 }
 
@@ -305,19 +302,18 @@ resource "aws_networkmanager_link" "test" {
 }
 
 func testAccNetworkManagerLinkConfig_Update(description, service_provider, link_type string, download_speed, upload_speed int) string {
-	fmt.Println("MYDEBUG:	testAccNetworkManagerLinkConfig_Update()")
 	return fmt.Sprintf(`
 resource "aws_networkmanager_global_network" "test" {
  description = "test"
 }
 
 resource "aws_networkmanager_site" "test" {
- description       = test
+ description       = "test"
  global_network_id = "${aws_networkmanager_global_network.test.id}"
 }
 
 resource "aws_networkmanager_site" "test2" {
- description       = test2
+ description       = "test2"
  global_network_id = "${aws_networkmanager_global_network.test.id}"
 }
 

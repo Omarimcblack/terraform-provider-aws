@@ -48,16 +48,6 @@ func resourceAwsNetworkManagerLink() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-			},
-			"global_network_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
 			"bandwidth": {
 				Type:     schema.TypeList,
 				Required: true,
@@ -75,6 +65,17 @@ func resourceAwsNetworkManagerLink() *schema.Resource {
 					},
 				},
 			},
+			"description": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"global_network_id": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+
 			"service_provider": {
 				Type:     schema.TypeString,
 				Optional: true,
