@@ -90,7 +90,7 @@ func resourceAwsNetworkManagerSiteCreate(d *schema.ResourceData, meta interface{
 	input := &networkmanager.CreateSiteInput{
 		Description:     aws.String(d.Get("description").(string)),
 		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
-		Location:        resourceAwsNetworkManagerSiteLocation(d),
+		Location:        resourceAwsNetworkManagerLocation(d),
 		Tags:            keyvaluetags.New(d.Get("tags").(map[string]interface{})).IgnoreAws().NetworkmanagerTags(),
 	}
 
@@ -215,19 +215,6 @@ func resourceAwsNetworkManagerSiteDelete(d *schema.ResourceData, meta interface{
 	}
 
 	return nil
-}
-
-func resourceAwsNetworkManagerSiteLocation(d *schema.ResourceData) *networkmanager.Location {
-	count := d.Get("location.#").(int)
-	if count == 0 {
-		return nil
-	}
-
-	return &networkmanager.Location{
-		Address:   aws.String(d.Get("location.0.address").(string)),
-		Latitude:  aws.String(d.Get("location.0.latitude").(string)),
-		Longitude: aws.String(d.Get("location.0.longitude").(string)),
-	}
 }
 
 func networkmanagerSiteRefreshFunc(conn *networkmanager.NetworkManager, globalNetworkID, siteID string) resource.StateRefreshFunc {
