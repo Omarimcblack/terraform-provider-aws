@@ -2,238 +2,175 @@ package aws
 
 import (
 	"fmt"
-	"log"
-	"strings"
-	"time"
-
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/service/networkmanager"
+	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
+	"log"
+	"testing"
 )
 
-func resourceAwsNetworkManagerTransitGatewayRegistration() *schema.Resource {
-	return &schema.Resource{
-		Create: resourceAwsNetworkManagerTransitGatewayRegistrationCreate,
-		Read:   resourceAwsNetworkManagerTransitGatewayRegistrationRead,
-		Delete: resourceAwsNetworkManagerTransitGatewayRegistrationDelete,
-		Importer: &schema.ResourceImporter{
-			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
-				idErr := fmt.Errorf("Expected ID in format of arn:aws:ec2:REGION:ACCOUNTID:transit-gateway/TGWID,GLOBALNETWORKID and provided: %s", d.Id())
-
-				identifiers := strings.Split(d.Id(), ",")
-				if len(identifiers) != 2 {
-					return nil, idErr
-				}
-				if arn.IsARN(identifiers[0]) {
-					d.Set("transit_gateway_arn", identifiers[0])
-				} else {
-					return nil, idErr
-				}
-
-				d.Set("global_network_id", identifiers[1])
-
-				return []*schema.ResourceData{d}, nil
-			},
-		},
-
-		Schema: map[string]*schema.Schema{
-			"global_network_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-			"transit_gateway_arn": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-		},
-	}
-}
-
-func resourceAwsNetworkManagerTransitGatewayRegistrationCreate(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).networkmanagerconn
-
-	globalNetworkId := d.Get("global_network_id").(string)
-	transitGatewayArn := d.Get("transit_gateway_arn").(string)
-
-	input := &networkmanager.RegisterTransitGatewayInput{
-		GlobalNetworkId:   aws.String(globalNetworkId),
-		TransitGatewayArn: aws.String(transitGatewayArn),
-	}
-
-	log.Printf("[DEBUG] Creating Network Manager Transit gateway Registration: %s", input)
-
-	output, err := conn.RegisterTransitGateway(input)
-	if err != nil {
-		return fmt.Errorf("error creating Network Manager Transit Gateway Registration: %s", err)
-	}
-
-	d.SetId(fmt.Sprintf("%s,%s", transitGatewayArn, globalNetworkId))
-
-	stateConf := &resource.StateChangeConf{
-		Pending: []string{networkmanager.TransitGatewayRegistrationStatePending},
-		Target:  []string{networkmanager.TransitGatewayRegistrationStateAvailable},
-		Refresh: networkmanagerTransitGatewayRegistrationRefreshFunc(conn, aws.StringValue(output.TransitGatewayRegistration.GlobalNetworkId), aws.StringValue(output.TransitGatewayRegistration.TransitGatewayArn)),
-		Timeout: 10 * time.Minute,
-	}
-
-	_, err = stateConf.WaitForState()
-	if err != nil {
-		return fmt.Errorf("error waiting for Network Manager Transit Gateway Registration (%s) availability: %s", d.Id(), err)
-	}
-
-	return resourceAwsNetworkManagerTransitGatewayRegistrationRead(d, meta)
-}
-
-func resourceAwsNetworkManagerTransitGatewayRegistrationRead(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).networkmanagerconn
-
-	transitGatewayRegistration, err := networkmanagerDescribeTransitGatewayRegistration(conn, d.Get("global_network_id").(string), d.Get("transit_gateway_arn").(string))
-
-	if isAWSErr(err, "InvalidTransitGatewayRegistrationID.NotFound", "") {
-		log.Printf("[WARN] Network Manager Transit Gateway Registration (%s) not found, removing from state", d.Id())
-		d.SetId("")
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("error reading Network Manager Transit Gateway Registration: %s", err)
-	}
-
-	if transitGatewayRegistration == nil {
-		log.Printf("[WARN] Network Manager Transit Gateway Registration (%s) not found, removing from state", d.Id())
-		d.SetId("")
-		return nil
-	}
-
-	if aws.StringValue(transitGatewayRegistration.State.Code) == networkmanager.TransitGatewayRegistrationStateDeleting || aws.StringValue(transitGatewayRegistration.State.Code) == networkmanager.TransitGatewayRegistrationStateDeleted {
-		log.Printf("[WARN] Network Manager Transit Gateway Registration (%s) in deleted state (%s,%s), removing from state", d.Id(), aws.StringValue(transitGatewayRegistration.State.Code), aws.StringValue(transitGatewayRegistration.State.Message))
-		d.SetId("")
-		return nil
-	}
-
-	return nil
-}
-
-func resourceAwsNetworkManagerTransitGatewayRegistrationDelete(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).networkmanagerconn
-
-	input := &networkmanager.DeregisterTransitGatewayInput{
-		GlobalNetworkId:   aws.String(d.Get("global_network_id").(string)),
-		TransitGatewayArn: aws.String(d.Get("transit_gateway_arn").(string)),
-	}
-
-	log.Printf("[DEBUG] Deleting Network Manager Transit Gateway Registration (%s): %s", d.Id(), input)
-	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
-		req, _ := conn.DeregisterTransitGatewayRequest(input)
-		if err := req.Send(); err != nil {
-			return resource.NonRetryableError(err)
-		}
-
-		return nil
+func init() {
+	resource.AddTestSweepers("aws_networkmanager_transit_gateway_registration", &resource.Sweeper{
+		Name: "aws_networkmanager_transit_gateway_registration",
+		F:    testSweepNetworkManagerTransitGatewayRegistration,
 	})
-
-	if isResourceTimeoutError(err) {
-		req, _ := conn.DeregisterTransitGatewayRequest(input)
-		err = req.Send()
+}
+func testSweepNetworkManagerTransitGatewayRegistration(region string) error {
+	client, err := sharedClientForRegion(region)
+	if err != nil {
+		return fmt.Errorf("error getting client: %s", err)
 	}
-
-	if isAWSErr(err, "InvalidTransitGatewayRegistrationArn.NotFound", "") {
+	conn := client.(*AWSClient).networkmanagerconn
+	var sweeperErrs *multierror.Error
+	err = conn.GetTransitGatewayRegistrationsPages(&networkmanager.GetTransitGatewayRegistrationsInput{},
+		func(page *networkmanager.GetTransitGatewayRegistrationsOutput, lastPage bool) bool {
+			for _, transitGatewayRegistration := range page.TransitGatewayRegistrations {
+				input := &networkmanager.DeregisterTransitGatewayInput{
+					GlobalNetworkId:   transitGatewayRegistration.GlobalNetworkId,
+					TransitGatewayArn: transitGatewayRegistration.TransitGatewayArn,
+				}
+				transitGatewayArn := aws.StringValue(transitGatewayRegistration.TransitGatewayArn)
+				globalNetworkID := aws.StringValue(transitGatewayRegistration.GlobalNetworkId)
+				log.Printf("[INFO] Deleting Network Manager Transit Gateway Registration: %s", transitGatewayArn)
+				req, _ := conn.DeregisterTransitGatewayRequest(input)
+				err = req.Send()
+				if isAWSErr(err, "InvalidTransitGatewayRegistrationArn.NotFound", "") {
+					continue
+				}
+				if err != nil {
+					sweeperErr := fmt.Errorf("failed to delete Network Manager Transit Gateway Registration %s: %s", transitGatewayArn, err)
+					log.Printf("[ERROR] %s", sweeperErr)
+					sweeperErrs = multierror.Append(sweeperErrs, sweeperErr)
+					continue
+				}
+				if err := waitForNetworkManagerTransitGatewayRegistrationDeletion(conn, globalNetworkID, transitGatewayArn); err != nil {
+					sweeperErr := fmt.Errorf("error waiting for Network Manager Transit Gateway Registration (%s) deletion: %s", transitGatewayArn, err)
+					log.Printf("[ERROR] %s", sweeperErr)
+					sweeperErrs = multierror.Append(sweeperErrs, sweeperErr)
+					continue
+				}
+			}
+			return !lastPage
+		})
+	if testSweepSkipSweepError(err) {
+		log.Printf("[WARN] Skipping Network Manager Transit Gateway Registration sweep for %s: %s", region, err)
 		return nil
 	}
-
 	if err != nil {
-		return fmt.Errorf("error deleting Network Manager Transit Gateway Registration: %s", err)
+		return fmt.Errorf("Error retrieving Network Manager Transit Gateway Registrations: %s", err)
 	}
-
-	if err := waitForNetworkManagerTransitGatewayRegistrationDeletion(conn, d.Get("global_network_id").(string), d.Id()); err != nil {
-		return fmt.Errorf("error waiting for Network Manager Transit Gateway Registration (%s) deletion: %s", d.Id(), err)
+	return sweeperErrs.ErrorOrNil()
+}
+func TestAccAWSNetworkManagerTransitGatewayRegistration_basic(t *testing.T) {
+	resourceName := "aws_networkmanager_transit_gateway_registration.test"
+	gloablNetworkResourceName := "aws_networkmanager_global_network.test"
+	gloablNetwork2ResourceName := "aws_networkmanager_global_network.test2"
+	transitGatewayResourceName := "aws_ec2_transit_gateway.test"
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t); testAccPreCheckAWSEc2TransitGateway(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckAwsNetworkManagerTransitGatewayRegistrationDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNetworkManagerTransitGatewayRegistrationConfig(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsNetworkManagerTransitGatewayRegistrationExists(resourceName),
+					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetworkResourceName, "id"),
+					resource.TestCheckResourceAttrPair(resourceName, "transit_gateway_arn", transitGatewayResourceName, "arn"),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateIdFunc: testAccAWSNetworkManagerTransitGatewayRegistrationImportStateIdFunc(resourceName),
+				ImportStateVerify: true,
+			},
+			{
+				Config: testAccNetworkManagerTransitGatewayRegistrationConfig_Update(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsNetworkManagerTransitGatewayRegistrationExists(resourceName),
+					resource.TestCheckResourceAttrPair(resourceName, "global_network_id", gloablNetwork2ResourceName, "id"),
+					resource.TestCheckResourceAttrPair(resourceName, "transit_gateway_arn", transitGatewayResourceName, "arn"),
+				),
+			},
+		},
+	})
+}
+func testAccCheckAwsNetworkManagerTransitGatewayRegistrationDestroy(s *terraform.State) error {
+	conn := testAccProvider.Meta().(*AWSClient).networkmanagerconn
+	for _, rs := range s.RootModule().Resources {
+		if rs.Type != "aws_networkmanager_transit_gateway_registration" {
+			continue
+		}
+		transitGatewayArn, err := networkmanagerDescribeTransitGatewayRegistration(conn, rs.Primary.Attributes["global_network_id"], rs.Primary.Attributes["transit_gateway_arn"])
+		if err != nil {
+			if isAWSErr(err, networkmanager.ErrCodeValidationException, "") {
+				return nil
+			}
+			return err
+		}
+		if transitGatewayArn == nil {
+			continue
+		}
+		return fmt.Errorf("Expected Transit Gateway Registration to be destroyed, %s found", rs.Primary.ID)
 	}
-
 	return nil
 }
-
-func networkmanagerTransitGatewayRegistrationRefreshFunc(conn *networkmanager.NetworkManager, globalNetworkID, transitGatewayArn string) resource.StateRefreshFunc {
-	return func() (interface{}, string, error) {
-		transitGatewayRegistration, err := networkmanagerDescribeTransitGatewayRegistration(conn, globalNetworkID, transitGatewayArn)
-
-		if isAWSErr(err, "InvalidTransitGatewayRegistrationID.NotFound", "") {
-			return nil, "DELETED", nil
+func testAccCheckAwsNetworkManagerTransitGatewayRegistrationExists(name string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[name]
+		if !ok {
+			return fmt.Errorf("Not found: %s", name)
 		}
-
+		conn := testAccProvider.Meta().(*AWSClient).networkmanagerconn
+		transitGatewayArn, err := networkmanagerDescribeTransitGatewayRegistration(conn, rs.Primary.Attributes["global_network_id"], rs.Primary.Attributes["transit_gateway_arn"])
 		if err != nil {
-			return nil, "", fmt.Errorf("error reading Network Manager Transit Gateway Registration (%s): %s", transitGatewayArn, err)
+			return err
 		}
-
-		if transitGatewayRegistration == nil {
-			return nil, "DELETED", nil
+		if transitGatewayArn == nil {
+			return fmt.Errorf("Network Manager Transit Gateway Registration not found")
 		}
-
-		return transitGatewayRegistration, aws.StringValue(transitGatewayRegistration.State.Code), nil
+		if aws.StringValue(transitGatewayArn.State.Code) != networkmanager.TransitGatewayRegistrationStateAvailable && aws.StringValue(transitGatewayArn.State.Code) != networkmanager.TransitGatewayRegistrationStatePending {
+			return fmt.Errorf("Network Manager Transit Gateway Registration (%s) exists in (%s) state", rs.Primary.Attributes["transit_gateway_arn"], aws.StringValue(transitGatewayArn.State.Code))
+		}
+		return err
 	}
 }
-
-func networkmanagerDescribeTransitGatewayRegistration(conn *networkmanager.NetworkManager, globalNetworkID, transitGatewayArn string) (*networkmanager.TransitGatewayRegistration, error) {
-	input := &networkmanager.GetTransitGatewayRegistrationsInput{
-		GlobalNetworkId:    aws.String(globalNetworkID),
-		TransitGatewayArns: []*string{aws.String(transitGatewayArn)},
-	}
-
-	log.Printf("[DEBUG] Reading Network Manager Transit Gateway Registration (%s): %s", transitGatewayArn, input)
-	for {
-		output, err := conn.GetTransitGatewayRegistrations(input)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if output == nil || len(output.TransitGatewayRegistrations) == 0 {
-			return nil, nil
-		}
-
-		for _, transitGatewayRegistration := range output.TransitGatewayRegistrations {
-			if transitGatewayRegistration == nil {
-				continue
-			}
-
-			if aws.StringValue(transitGatewayRegistration.TransitGatewayArn) == transitGatewayArn {
-				return transitGatewayRegistration, nil
-			}
-		}
-
-		if aws.StringValue(output.NextToken) == "" {
-			break
-		}
-
-		input.NextToken = output.NextToken
-	}
-
-	return nil, nil
+func testAccNetworkManagerTransitGatewayRegistrationConfig() string {
+	return `
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
 }
-
-func waitForNetworkManagerTransitGatewayRegistrationDeletion(conn *networkmanager.NetworkManager, globalNetworkID, transitGatewayArn string) error {
-	stateConf := &resource.StateChangeConf{
-		Pending: []string{
-			networkmanager.TransitGatewayRegistrationStateAvailable,
-			networkmanager.TransitGatewayRegistrationStateDeleting,
-		},
-		Target: []string{
-			networkmanager.TransitGatewayRegistrationStateDeleted,
-		},
-		Refresh:        networkmanagerTransitGatewayRegistrationRefreshFunc(conn, globalNetworkID, transitGatewayArn),
-		Timeout:        10 * time.Minute,
-		NotFoundChecks: 1,
+resource "aws_ec2_transit_gateway" "test" {}
+resource "aws_networkmanager_transit_gateway_registration" "test" {
+ global_network_id   = "${aws_networkmanager_global_network.test.id}"
+ transit_gateway_arn = "${aws_ec2_transit_gateway.test.arn}"
+}
+`
+}
+func testAccNetworkManagerTransitGatewayRegistrationConfig_Update() string {
+	return `
+resource "aws_networkmanager_global_network" "test" {
+ description = "test"
+}
+resource "aws_networkmanager_global_network" "test2" {
+ description = "test2"
+}
+resource "aws_ec2_transit_gateway" "test" {}
+resource "aws_networkmanager_transit_gateway_registration" "test" {
+ global_network_id   = "${aws_networkmanager_global_network.test2.id}"
+ transit_gateway_arn = "${aws_ec2_transit_gateway.test.arn}"
+}
+`
+}
+func testAccAWSNetworkManagerTransitGatewayRegistrationImportStateIdFunc(resourceName string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return "", fmt.Errorf("Not found: %s", resourceName)
+		}
+		return fmt.Sprintf("%s,%s", rs.Primary.Attributes["transit_gateway_arn"], rs.Primary.Attributes["global_network_id"]), nil
 	}
-
-	log.Printf("[DEBUG] Waiting for Network Manager Transit Gateway Registration (%s) deletion", transitGatewayArn)
-	_, err := stateConf.WaitForState()
-
-	if isResourceNotFoundError(err) {
-		return nil
-	}
-
-	return err
 }

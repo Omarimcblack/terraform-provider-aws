@@ -149,7 +149,7 @@ func resourceAwsNetworkManagerTransitGatewayRegistrationDelete(d *schema.Resourc
 		return fmt.Errorf("error deleting Network Manager Transit Gateway Registration: %s", err)
 	}
 
-	if err := waitForNetworkManagerTransitGatewayRegistrationDeletion(conn, d.Get("global_network_id").(string), d.Id()); err != nil {
+	if err := waitForNetworkManagerTransitGatewayRegistrationDeletion(conn, d.Get("global_network_id").(string), d.Get("transit_gateway_arn").(string)); err != nil {
 		return fmt.Errorf("error waiting for Network Manager Transit Gateway Registration (%s) deletion: %s", d.Id(), err)
 	}
 
@@ -165,7 +165,7 @@ func networkmanagerTransitGatewayRegistrationRefreshFunc(conn *networkmanager.Ne
 		}
 
 		if err != nil {
-			return nil, "", fmt.Errorf("error reading Network Manager Transit Gateway Registration (%s): %s", transitGatewayArn, err)
+			return nil, "", fmt.Errorf("error reading Network Manager Transit Gateway Registration (%s,%s): %s", transitGatewayArn, globalNetworkID, err)
 		}
 
 		if transitGatewayRegistration == nil {
