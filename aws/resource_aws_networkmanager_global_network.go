@@ -30,7 +30,6 @@ func resourceAwsNetworkManagerGlobalNetwork() *schema.Resource {
 			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"tags": tagsSchema(),
 		},
@@ -50,7 +49,21 @@ func resourceAwsNetworkManagerGlobalNetworkCreate(d *schema.ResourceData, meta i
 	}
 
 	log.Printf("[DEBUG] Creating Network Manager Global Network: %s", input)
-	output, err := conn.CreateGlobalNetwork(input)
+	var output *networkmanager.CreateGlobalNetworkOutput
+	err := resource.Retry(1*time.Minute, func() *resource.RetryError {
+		var err error
+		output, err = conn.CreateGlobalNetwork(input)
+		if err != nil {
+			if isAWSErr(err, "ValidationException", "Resource already exists with ID") {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	if isResourceTimeoutError(err) {
+		output, err = conn.CreateGlobalNetwork(input)
+	}
 	if err != nil {
 		return fmt.Errorf("error creating Network Manager Global Network: %s", err)
 	}
@@ -112,6 +125,18 @@ func resourceAwsNetworkManagerGlobalNetworkRead(d *schema.ResourceData, meta int
 
 func resourceAwsNetworkManagerGlobalNetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).networkmanagerconn
+
+	if d.HasChange("description") {
+		request := &networkmanager.UpdateGlobalNetworkInput{
+			Description:     aws.String(d.Get("description").(string)),
+			GlobalNetworkId: aws.String(d.Id()),
+		}
+
+		_, err := conn.UpdateGlobalNetwork(request)
+		if err != nil {
+			return fmt.Errorf("Failure updating Network Manager Global Network description: %s", err)
+		}
+	}
 
 	if d.HasChange("tags") {
 		o, n := d.GetChange("tags")

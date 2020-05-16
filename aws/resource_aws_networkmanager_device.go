@@ -51,7 +51,6 @@ func resourceAwsNetworkManagerDevice() *schema.Resource {
 			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"global_network_id": {
 				Type:     schema.TypeString,
@@ -90,7 +89,6 @@ func resourceAwsNetworkManagerDevice() *schema.Resource {
 			"site_id": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"tags": tagsSchema(),
 			"type": {
@@ -111,7 +109,7 @@ func resourceAwsNetworkManagerDeviceCreate(d *schema.ResourceData, meta interfac
 	input := &networkmanager.CreateDeviceInput{
 		Description:     aws.String(d.Get("description").(string)),
 		GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
-		Location:        resourceAwsNetworkManagerLocation(d),
+		Location:        expandNetworkManagerLocation(d.Get("location").([]interface{})),
 		Model:           aws.String(d.Get("model").(string)),
 		SerialNumber:    aws.String(d.Get("serial_number").(string)),
 		SiteId:          aws.String(d.Get("site_id").(string)),
@@ -174,12 +172,15 @@ func resourceAwsNetworkManagerDeviceRead(d *schema.ResourceData, meta interface{
 
 	d.Set("arn", device.DeviceArn)
 	d.Set("description", device.Description)
-	d.Set("location", device.Location)
 	d.Set("model", device.Model)
 	d.Set("serial_number", device.SerialNumber)
 	d.Set("site_id", device.SiteId)
 	d.Set("type", device.Type)
 	d.Set("vendor", device.Vendor)
+
+	if err := d.Set("location", flattenNetworkManagerLocation(device.Location)); err != nil {
+		return fmt.Errorf("error setting location: %s", err)
+	}
 
 	if err := d.Set("tags", keyvaluetags.NetworkmanagerKeyValueTags(device.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
 		return fmt.Errorf("error setting tags: %s", err)
@@ -190,6 +191,25 @@ func resourceAwsNetworkManagerDeviceRead(d *schema.ResourceData, meta interface{
 
 func resourceAwsNetworkManagerDeviceUpdate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).networkmanagerconn
+
+	if d.HasChange("description") || d.HasChange("location") || d.HasChange("model") || d.HasChange("serial_number") || d.HasChange("site_id") || d.HasChange("type") || d.HasChange("vendor") {
+		request := &networkmanager.UpdateDeviceInput{
+			Description:     aws.String(d.Get("description").(string)),
+			DeviceId:        aws.String(d.Id()),
+			GlobalNetworkId: aws.String(d.Get("global_network_id").(string)),
+			Location:        expandNetworkManagerLocation(d.Get("location").([]interface{})),
+			Model:           aws.String(d.Get("model").(string)),
+			SerialNumber:    aws.String(d.Get("serial_number").(string)),
+			SiteId:          aws.String(d.Get("site_id").(string)),
+			Type:            aws.String(d.Get("type").(string)),
+			Vendor:          aws.String(d.Get("vendor").(string)),
+		}
+
+		_, err := conn.UpdateDevice(request)
+		if err != nil {
+			return fmt.Errorf("Failure updating Network Manager Device (%s): %s", d.Id(), err)
+		}
+	}
 
 	if d.HasChange("tags") {
 		o, n := d.GetChange("tags")
