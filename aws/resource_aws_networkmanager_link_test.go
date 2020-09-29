@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/networkmanager"
 	"github.com/hashicorp/go-multierror"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
 func init() {
@@ -229,13 +229,13 @@ resource "aws_networkmanager_global_network" "test" {
 
 resource "aws_networkmanager_site" "test" {
  description       = "test"
- global_network_id = "${aws_networkmanager_global_network.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
 }
 
 resource "aws_networkmanager_link" "test" {
  description       = %q
- global_network_id = "${aws_networkmanager_global_network.test.id}"
- site_id           = "${aws_networkmanager_site.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
+ site_id           = aws_networkmanager_site.test.id
 
  bandwidth {
   download_speed  = 10
@@ -253,13 +253,13 @@ resource "aws_networkmanager_global_network" "test" {
 
 resource "aws_networkmanager_site" "test" {
  description       = "test"
- global_network_id = "${aws_networkmanager_global_network.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
 }
 
 resource "aws_networkmanager_link" "test" {
  description       = %q
- global_network_id = "${aws_networkmanager_global_network.test.id}"
- site_id           = "${aws_networkmanager_site.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
+ site_id           = aws_networkmanager_site.test.id
 
  bandwidth {
   download_speed  = 10
@@ -281,13 +281,14 @@ resource "aws_networkmanager_global_network" "test" {
 
 resource "aws_networkmanager_site" "test" {
  description       = "test"
- global_network_id = "${aws_networkmanager_global_network.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
 }
 
 resource "aws_networkmanager_link" "test" {
  description       = %q
- global_network_id = "${aws_networkmanager_global_network.test.id}"
- 
+ global_network_id = aws_networkmanager_global_network.test.id
+ site_id           = aws_networkmanager_site.test.id
+
   bandwidth {
    download_speed  = 10
    upload_speed    = 20
@@ -309,18 +310,18 @@ resource "aws_networkmanager_global_network" "test" {
 
 resource "aws_networkmanager_site" "test" {
  description       = "test"
- global_network_id = "${aws_networkmanager_global_network.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
 }
 
 resource "aws_networkmanager_site" "test2" {
  description       = "test2"
- global_network_id = "${aws_networkmanager_global_network.test.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
 }
 
 resource "aws_networkmanager_link" "test" {
  description       = %q
- global_network_id = "${aws_networkmanager_global_network.test.id}"
- site_id           = "${aws_networkmanager_site.test2.id}"
+ global_network_id = aws_networkmanager_global_network.test.id
+ site_id           = aws_networkmanager_site.test2.id
  service_provider  = %q
  type              = %q
 

@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/service/networkmanager"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/terraform-providers/terraform-provider-aws/aws/internal/keyvaluetags"
 )
 
@@ -56,11 +56,11 @@ func resourceAwsNetworkManagerLink() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"download_speed": {
 							Type:     schema.TypeInt,
-							Optional: true,
+							Required: true,
 						},
 						"upload_speed": {
 							Type:     schema.TypeInt,
-							Optional: true,
+							Required: true,
 						},
 					},
 				},
@@ -68,7 +68,6 @@ func resourceAwsNetworkManagerLink() *schema.Resource {
 			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"global_network_id": {
 				Type:     schema.TypeString,
