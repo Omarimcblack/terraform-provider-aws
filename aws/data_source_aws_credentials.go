@@ -15,18 +15,27 @@ func dataSourceAwsCredentials() *schema.Resource {
 				Type:      schema.TypeString,
 				Computed:  true,
 				Sensitive: true,
+				StateFunc: func(v interface{}) string {
+					return "access_key"
+				},
 			},
 
 			"secret_key": {
 				Type:      schema.TypeString,
 				Computed:  true,
 				Sensitive: true,
+				StateFunc: func(v interface{}) string {
+					return "secret_key"
+				},
 			},
 
 			"token": {
 				Type:      schema.TypeString,
 				Computed:  true,
 				Sensitive: true,
+				StateFunc: func(v interface{}) string {
+					return "token"
+				},
 			},
 		},
 	}
